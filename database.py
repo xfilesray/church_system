@@ -250,6 +250,10 @@ def reset_all_settings_to_default() -> bool:
 # 👥 同工名單維護模組 (Workers CRUD)
 # ==========================================
 
+# ==========================================
+# 👥 同工名單維護模組 (Workers CRUD)
+# ==========================================
+
 def get_all_workers() -> List[Dict]:
     """獲取所有同工名單"""
     try:
@@ -262,7 +266,8 @@ def get_all_workers() -> List[Dict]:
 
 def add_worker(name: str, department: str = "", role: str = "", phone: str = "", email: str = "") -> Tuple[bool, str]:
     """
-    新增同工資料 (包含詳細錯誤回傳)
+    新增同工資料
+    回傳值: (是否成功, 提示或錯誤訊息)
     """
     if not name.strip():
         return False, "同工姓名不可為空白。"
@@ -279,21 +284,28 @@ def add_worker(name: str, department: str = "", role: str = "", phone: str = "",
         res = supabase.table("workers").insert(payload).execute()
         
         if res.data and len(res.data) > 0:
-            return True, "成功新增同工資料！"
+            return True, f"同工【{name.strip()}】資料已成功新增！"
         else:
-            return False, "資料庫未回傳寫入結果，請檢查資料表設定。"
+            return False, "資料庫寫入成功但未回傳資料，請確認 Supabase RLS 或資料表 Trigger 設定。"
             
     except Exception as e:
         error_msg = str(e)
         print(f"[Error add_worker]: {error_msg}")
         return False, f"資料庫寫入失敗：{error_msg}"
 
-def delete_worker(worker_id: int) -> bool:
-    """刪除同工資料"""
+def delete_worker(worker_id: int) -> Tuple[bool, str]:
+    """
+    刪除同工資料
+    回傳值: (是否成功, 提示或錯誤訊息)
+    """
     try:
         supabase = get_client()
         res = supabase.table("workers").delete().eq("id", worker_id).execute()
-        return len(res.data) > 0
+        if res.data and len(res.data) > 0:
+            return True, "同工資料刪除成功！"
+        else:
+            return False, "未找到該筆同工資料或無刪除權限。"
     except Exception as e:
-        print(f"[Error delete_worker]: {e}")
-        return False
+        error_msg = str(e)
+        print(f"[Error delete_worker]: {error_msg}")
+        return False, f"刪除失敗：{error_msg}"
