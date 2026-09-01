@@ -233,6 +233,7 @@ with tab_admin:
                     st.rerun()
 
     # ──── 分支 B：處理 同工名單 CRUD 管理 ────
+ # ──── 分支 B：處理 同工名單 CRUD 管理 ────
     elif admin_target == "👥 教會同工名單維護":
         st.markdown("---")
         st.subheader("👥 教會同工名單維護區塊")
@@ -275,11 +276,13 @@ with tab_admin:
                     st.write("")
                     if st.button("確認刪除", key="btn_delete_worker", type="secondary"):
                         if worker_to_delete:
-                            if db.delete_worker(worker_to_delete["id"]):
+                            # 修改點：接收 (success, msg) 雙變數
+                            del_success, del_msg = db.delete_worker(worker_to_delete["id"])
+                            if del_success:
                                 st.success(f"已成功刪除同工：{worker_to_delete['name']}")
                                 st.rerun()
                             else:
-                                st.error("刪除失敗，請檢查資料庫連線。")
+                                st.error(f"❌ {del_msg}")
 
         with subtab_add:
             st.markdown("##### ➕ 新增同工基本資料")
@@ -296,8 +299,13 @@ with tab_admin:
                 if not new_w_name.strip():
                     st.warning("⚠️ 請務必填寫「同工姓名」！")
                 else:
-                    if db.add_worker(new_w_name, new_w_dept, new_w_role, new_w_phone, new_w_email):
-                        st.success(f"🎉 同工【{new_w_name}】資料已成功新增！")
+                    # 修改點：接收 (success, msg) 雙變數
+                    add_success, add_msg = db.add_worker(
+                        new_w_name, new_w_dept, new_w_role, new_w_phone, new_w_email
+                    )
+                    if add_success:
+                        st.success(f"🎉 {add_msg}")
                         st.rerun()
                     else:
-                        st.error("新增失敗，請檢查資料庫連線或 Supabase `workers` 表結構。")
+                        # 畫面上直接輸出 Supabase 丟出的 Exception，精準定位失敗原因
+                        st.error(f"❌ {add_msg}")
