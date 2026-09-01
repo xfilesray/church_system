@@ -210,7 +210,7 @@ with tab_admin:
         value="\n".join(current_list),
         height=220,
         help="請逐行輸入您要顯示於選單中的名稱。",
-        key="admin_raw_text_area"
+        key=f"admin_raw_text_{current_key}"
     )
 
     col_btn1, col_btn2 = st.columns([2, 4])
