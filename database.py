@@ -173,3 +173,75 @@ def query_records(table_name: str, keyword: str = "", start_date: str = None, en
     except Exception as e:
         print(f"[Unexpected Error]: {e}")
         return pd.DataFrame({"error": [f"系統發生未預期錯誤：{str(e)}"]})
+
+
+
+
+
+
+# ==========================================
+# ⚙️ 後台動態設定模組 (System Settings CRUD)
+# ==========================================
+
+DEFAULT_SETTINGS = {
+    "TIME_SLOT_OPTIONS": [
+        "早堂 (08:00 - 10:00)",
+        "主日堂 (10:00 - 12:00)",
+        "午堂 (14:00 - 16:00)",
+        "晚堂 (19:00 - 21:00)",
+        "其他 / 請自行於下方輸入"
+    ],
+    "GRACE_GIFTS_OPTIONS": [
+        "講道 / 分享", "敬拜讚美 / 樂手", "關懷代禱",
+        "影音 / 音控 / 直播", "行政協調 / 總務",
+        "兒童主日學 / 青少年", "招待 / 迎賓", "其他"
+    ],
+    "VENUE_OPTIONS": [
+        "大堂 (Main Sanctuary)", "副堂 (Side Chapel)",
+        "101 教室", "102 教室", "舞蹈 / 小組室", "其他"
+    ],
+    "ROSTER_ROLES_OPTIONS": [
+        "講員 / 證道", "敬拜主領", "音控 / 直播同工",
+        "招待 / 迎賓同工", "主日學老師", "其他事奉同工"
+    ]
+}
+
+def get_setting_options(key_name: str) -> List[str]:
+    """獲取指定 key 的動態選項陣列，若不存在則初始化並傳回預設值"""
+    try:
+        supabase = get_client()
+        res = supabase.table("system_settings").select("setting_value").eq("setting_key", key_name).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0].get("setting_value", [])
+        else:
+            # 資料庫尚無資料，自動寫入預設值
+            default_val = DEFAULT_SETTINGS.get(key_name, [])
+            update_setting_options(key_name, default_val)
+            return default_val
+    except Exception as e:
+        print(f"[Error get_setting_options]: {e}")
+        return DEFAULT_SETTINGS.get(key_name, [])
+
+def update_setting_options(key_name: str, options_list: List[str]) -> bool:
+    """更新指定 key 的選項陣列"""
+    try:
+        supabase = get_client()
+        data = {
+            "setting_key": key_name,
+            "setting_value": options_list
+        }
+        res = supabase.table("system_settings").upsert(data).execute()
+        return len(res.data) > 0
+    except Exception as e:
+        print(f"[Error update_setting_options]: {e}")
+        return False
+
+def reset_all_settings_to_default() -> bool:
+    """重置所有選單為初始預設值"""
+    try:
+        for k, v in DEFAULT_SETTINGS.items():
+            update_setting_options(k, v)
+        return True
+    except Exception as e:
+        print(f"[Error reset_all_settings_to_default]: {e}")
+        return False
