@@ -246,26 +246,24 @@ def reset_all_settings_to_default() -> bool:
         print(f"[Error reset_all_settings_to_default]: {e}")
         return False
 
-# 📄 database.py 新增區塊
+# ==========================================
+# 👥 同工名單維護模組 (Workers CRUD)
+# ==========================================
 
-def get_all_workers():
+def get_all_workers() -> List[Dict]:
     """獲取所有同工名單"""
-    client = get_supabase_client()
-    if not client:
-        return []
     try:
-        response = client.table("workers").select("*").order("id", desc=False).execute()
-        return response.data
+        supabase = get_client()
+        res = supabase.table("workers").select("*").order("id", desc=False).execute()
+        return res.data if res.data else []
     except Exception as e:
-        print(f"Error fetching workers: {e}")
+        print(f"[Error get_all_workers]: {e}")
         return []
 
-def add_worker(name, department="", role="", phone="", email=""):
+def add_worker(name: str, department: str = "", role: str = "", phone: str = "", email: str = "") -> bool:
     """新增同工資料"""
-    client = get_supabase_client()
-    if not client:
-        return False
     try:
+        supabase = get_client()
         payload = {
             "name": name.strip(),
             "department": department.strip(),
@@ -273,20 +271,18 @@ def add_worker(name, department="", role="", phone="", email=""):
             "phone": phone.strip(),
             "email": email.strip()
         }
-        client.table("workers").insert(payload).execute()
-        return True
+        res = supabase.table("workers").insert(payload).execute()
+        return len(res.data) > 0
     except Exception as e:
-        print(f"Error adding worker: {e}")
+        print(f"[Error add_worker]: {e}")
         return False
 
-def delete_worker(worker_id):
+def delete_worker(worker_id: int) -> bool:
     """刪除同工資料"""
-    client = get_supabase_client()
-    if not client:
-        return False
     try:
-        client.table("workers").delete().eq("id", worker_id).execute()
-        return True
+        supabase = get_client()
+        res = supabase.table("workers").delete().eq("id", worker_id).execute()
+        return len(res.data) > 0
     except Exception as e:
-        print(f"Error deleting worker: {e}")
+        print(f"[Error delete_worker]: {e}")
         return False
