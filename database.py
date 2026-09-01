@@ -260,8 +260,13 @@ def get_all_workers() -> List[Dict]:
         print(f"[Error get_all_workers]: {e}")
         return []
 
-def add_worker(name: str, department: str = "", role: str = "", phone: str = "", email: str = "") -> bool:
-    """新增同工資料"""
+def add_worker(name: str, department: str = "", role: str = "", phone: str = "", email: str = "") -> Tuple[bool, str]:
+    """
+    新增同工資料 (包含詳細錯誤回傳)
+    """
+    if not name.strip():
+        return False, "同工姓名不可為空白。"
+
     try:
         supabase = get_client()
         payload = {
@@ -272,10 +277,16 @@ def add_worker(name: str, department: str = "", role: str = "", phone: str = "",
             "email": email.strip()
         }
         res = supabase.table("workers").insert(payload).execute()
-        return len(res.data) > 0
+        
+        if res.data and len(res.data) > 0:
+            return True, "成功新增同工資料！"
+        else:
+            return False, "資料庫未回傳寫入結果，請檢查資料表設定。"
+            
     except Exception as e:
-        print(f"[Error add_worker]: {e}")
-        return False
+        error_msg = str(e)
+        print(f"[Error add_worker]: {error_msg}")
+        return False, f"資料庫寫入失敗：{error_msg}"
 
 def delete_worker(worker_id: int) -> bool:
     """刪除同工資料"""
