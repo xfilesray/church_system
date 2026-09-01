@@ -134,61 +134,62 @@ with tab_roster:
             else:
                 st.error("發布失敗，請檢查資料庫連線。")
 
-# ── 模組 D (🔍 全欄位查詢版面) ──
+# ── 模組 D (🔍 全欄位查詢版面 - 精簡版) ──
 with tab_search:
     st.header(c.LABELS["search_header"])
     
-    subtab_query, subtab_worker = st.tabs([
-        c.LABELS["subtab_query"],
-        c.LABELS["subtab_worker_mgmt"]
-    ])
-    
-    with subtab_query:
-        col_q1, col_q2, col_q3 = st.columns([2, 3, 3])
-        with col_q1:
-            module_choice = st.selectbox(c.LABELS["select_module"], ["恩典紀錄", "場地借用", "事奉排班"], key="search_module_choice")
-        with col_q2:
-            search_kw = st.text_input(c.LABELS["search_keyword"], key="search_keyword_input")
-        with col_q3:
-            date_range = st.date_input(
-                c.LABELS["date_range"], 
-                value=(datetime.date.today() - datetime.timedelta(days=30), datetime.date.today()),
-                key="search_date_range"
+    col_q1, col_q2, col_q3 = st.columns([2, 3, 3])
+    with col_q1:
+        module_choice = st.selectbox(
+            c.LABELS["select_module"], 
+            ["恩典紀錄", "場地借用", "事奉排班"], 
+            key="search_module_choice"
+        )
+    with col_q2:
+        search_kw = st.text_input(c.LABELS["search_keyword"], key="search_keyword_input")
+    with col_q3:
+        date_range = st.date_input(
+            c.LABELS["date_range"], 
+            value=(datetime.date.today() - datetime.timedelta(days=30), datetime.date.today()),
+            key="search_date_range"
+        )
+        
+    if st.button(c.LABELS["btn_search"], key="btn_execute_search", type="primary"):
+        table_map = {
+            "恩典紀錄": "grace_records",
+            "場地借用": "venue_bookings",
+            "事奉排班": "roster_records"
+        }
+        start_d = date_range[0].strftime("%Y-%m-%d") if len(date_range) > 0 else None
+        end_d = date_range[1].strftime("%Y-%m-%d") if len(date_range) > 1 else None
+        
+        target_table = table_map.get(module_choice, "grace_records")
+        df_result = db.query_records(target_table, keyword=search_kw, start_date=start_d, end_date=end_d)
+        
+        if "error" in df_result.columns:
+            st.error(df_result["error"].iloc[0])
+        elif df_result.empty:
+            st.info(c.LABELS["no_data_found"])
+        else:
+            st.dataframe(df_result, use_container_width=True)
+            csv = df_result.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                c.LABELS["export_csv"], 
+                data=csv, 
+                file_name=f"{module_choice}_export.csv", 
+                mime="text/csv", 
+                key="btn_download_csv"
             )
-            
-        if st.button(c.LABELS["btn_search"], key="btn_execute_search"):
-            table_map = {
-                "恩典紀錄": "grace_records",
-                "場地借用": "venue_bookings",
-                "事奉排班": "roster_records"
-            }
-            start_d = date_range[0].strftime("%Y-%m-%d") if len(date_range) > 0 else None
-            end_d = date_range[1].strftime("%Y-%m-%d") if len(date_range) > 1 else None
-            
-            target_table = table_map.get(module_choice, "grace_records")
-            df_result = db.query_records(target_table, keyword=search_kw, start_date=start_d, end_date=end_d)
-            
-            if "error" in df_result.columns:
-                st.error(df_result["error"].iloc[0])
-            elif df_result.empty:
-                st.info(c.LABELS["no_data_found"])
-            else:
-                st.dataframe(df_result, use_container_width=True)
-                csv = df_result.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(c.LABELS["export_csv"], data=csv, file_name=f"{module_choice}_export.csv", mime="text/csv", key="btn_download_csv")
 
-    with subtab_worker:
-        st.subheader(c.LABELS["worker_mgmt_header"])
-        st.info("同工名單動態維護系統運作中，可於 Supabase `workers` 表進行新增與異動。")
 
-# ── 模組 E (⚙️ 後台管理與系統設定板面) ──
+# ── 模組 E (⚙️ 後台管理與系統設定板面 - 整合同工名單管理) ──
 with tab_admin:
-    st.header("⚙️ 系統選單與選項管理板面")
-    st.info("您可以在此自由增刪、修改全系統的下拉選單與事奉崗位選項。設定完成後請點擊「儲存設定」，前台將自動更新。")
+    st.header("⚙️ 系統設定與維護板面")
+    st.info("您可以在此維護全系統的選單選項，以及管理教會同工基本名單。")
 
     admin_target = st.selectbox(
         "請選擇欲管理的項目",
-        ["選擇時段", "事奉恩賜 / 服侍項目", "選擇借用場地 / 房間", "事奉排班崗位 / 項目"],
+        ["選擇時段", "事奉恩賜 / 服侍項目", "選擇借用場地 / 房間", "事奉排班崗位 / 項目", "👥 教會同工名單維護"],
         key="admin_target_select"
     )
 
@@ -199,32 +200,104 @@ with tab_admin:
         "事奉排班崗位 / 項目": "ROSTER_ROLES_OPTIONS"
     }
 
-    current_key = mapping_keys[admin_target]
-    current_list = db.get_setting_options(current_key)
+    # ──── 分支 A：處理 4 大選單選項文字編輯 ────
+    if admin_target in mapping_keys:
+        current_key = mapping_keys[admin_target]
+        current_list = db.get_setting_options(current_key)
 
-    st.markdown("---")
-    st.subheader(f"🛠️ 正在編輯：【{admin_target}】")
+        st.markdown("---")
+        st.subheader(f"🛠️ 正在編輯：【{admin_target}】")
 
-    raw_text = st.text_area(
-        "選項清單（每行代表一個選項）：",
-        value="\n".join(current_list),
-        height=220,
-        help="請逐行輸入您要顯示於選單中的名稱。",
-        key=f"admin_raw_text_{current_key}"
-    )
+        raw_text = st.text_area(
+            "選項清單（每行代表一個選項）：",
+            value="\n".join(current_list),
+            height=220,
+            help="請逐行輸入您要顯示於選單中的名稱。",
+            key=f"admin_raw_text_{current_key}"
+        )
 
-    col_btn1, col_btn2 = st.columns([2, 4])
-    with col_btn1:
-        if st.button("💾 儲存修改內容", type="primary", key="btn_save_admin_settings"):
-            new_options = [line.strip() for line in raw_text.split("\n") if line.strip()]
-            if db.update_setting_options(current_key, new_options):
-                st.success(f"✅ 【{admin_target}】選項已成功更新！")
-                st.rerun()
+        col_btn1, col_btn2 = st.columns([2, 4])
+        with col_btn1:
+            if st.button("💾 儲存修改內容", type="primary", key=f"btn_save_admin_{current_key}"):
+                new_options = [line.strip() for line in raw_text.split("\n") if line.strip()]
+                if db.update_setting_options(current_key, new_options):
+                    st.success(f"✅ 【{admin_target}】選項已成功更新！")
+                    st.rerun()
+                else:
+                    st.error("儲存失敗，請檢查資料庫權限或連線。")
+
+        with col_btn2:
+            if st.button("🔄 重置所有選項為系統預設值", key=f"btn_reset_admin_{current_key}"):
+                if db.reset_all_settings_to_default():
+                    st.success("已恢復預設設定！")
+                    st.rerun()
+
+    # ──── 分支 B：處理 同工名單 CRUD 管理 ────
+    elif admin_target == "👥 教會同工名單維護":
+        st.markdown("---")
+        st.subheader("👥 教會同工名單維護區塊")
+
+        # 子頁籤：檢視/刪除 與 新增同工
+        subtab_list, subtab_add = st.tabs(["📋 目前同工名單", "➕ 新增同工資料"])
+
+        with subtab_list:
+            workers_data = db.get_all_workers()
+            if not workers_data:
+                st.info("目前尚無同工資料，請至「新增同工資料」頁籤進行建立。")
             else:
-                st.error("儲存失敗，請檢查資料庫權限或連線。")
+                import pandas as pd
+                df_workers = pd.DataFrame(workers_data)
+                
+                # 重新整理欄位顯示順序與欄位名稱
+                column_rename = {
+                    "id": "ID",
+                    "name": "同工姓名",
+                    "department": "所屬部門/小組",
+                    "role": "主要事奉崗位",
+                    "phone": "聯絡電話",
+                    "email": "電子郵件"
+                }
+                df_display = df_workers.rename(columns=column_rename)
+                st.dataframe(df_display, use_container_width=True)
 
-    with col_btn2:
-        if st.button("🔄 重置所有選項為系統預設值", key="btn_reset_admin_settings"):
-            if db.reset_all_settings_to_default():
-                st.success("已恢復預設設定！")
-                st.rerun()
+                # 刪除同工功能
+                st.markdown("##### 🗑️ 刪除同工資料")
+                col_del1, col_del2 = st.columns([3, 1])
+                with col_del1:
+                    worker_to_delete = st.selectbox(
+                        "選擇要刪除的同工：",
+                        options=workers_data,
+                        format_func=lambda w: f"ID: {w['id']} | {w['name']} ({w.get('department', '無部門')})",
+                        key="sb_delete_worker"
+                    )
+                with col_del2:
+                    st.write("") # 垂直對齊置中
+                    st.write("")
+                    if st.button("確認刪除", key="btn_delete_worker", type="secondary"):
+                        if worker_to_delete:
+                            if db.delete_worker(worker_to_delete["id"]):
+                                st.success(f"已成功刪除同工：{worker_to_delete['name']}")
+                                st.rerun()
+                            else:
+                                st.error("刪除失敗，請檢查資料庫連線。")
+
+        with subtab_add:
+            st.markdown("##### ➕ 新增同工基本資料")
+            col_w1, col_w2 = st.columns(2)
+            with col_w1:
+                new_w_name = st.text_input("同工姓名 *", key="add_w_name")
+                new_w_dept = st.text_input("所屬部門 / 小組 (選填)", key="add_w_dept")
+                new_w_role = st.text_input("主要事奉崗位 (選填)", key="add_w_role")
+            with col_w2:
+                new_w_phone = st.text_input("聯絡電話 (選填)", key="add_w_phone")
+                new_w_email = st.text_input("電子郵件 (選填)", key="add_w_email")
+
+            if st.button("💾 儲存同工資料", type="primary", key="btn_save_new_worker"):
+                if not new_w_name.strip():
+                    st.warning("⚠️ 請務必填寫「同工姓名」！")
+                else:
+                    if db.add_worker(new_w_name, new_w_dept, new_w_role, new_w_phone, new_w_email):
+                        st.success(f"🎉 同工【{new_w_name}】資料已成功新增！")
+                        st.rerun()
+                    else:
+                        st.error("新增失敗，請檢查資料庫連線或 Supabase `workers` 表結構。")
